@@ -23,6 +23,7 @@ DOWNLOAD_DIR = pathlib.Path("data") # local folder
 FFMPEG_PATH = "tools/ffmpeg"
 SIZE = 30
 MIN_DURATION = 6
+TO_WAV = True
 
 # cosmos query
 client = CosmosClient(endpoint, credential=key)
@@ -30,7 +31,13 @@ client = CosmosClient(endpoint, credential=key)
 container = client.get_database_client(video_db_name).get_container_client(video_container_name)
 # orgs_container = client.get_database_client(orgs_db_name).get_container_client(orgs_container_name)
 
-query = "SELECT * FROM c WHERE c.userId = @userId ORDER BY c.uploadDate DESC"
+query = """
+SELECT * FROM c
+WHERE c.userId = @userId
+  AND c.generatedEmbeddings = true
+  AND c.watermarkedVideo = true
+ORDER BY c.uploadDate DESC
+"""
 
 items = list(container.query_items(
     query=query,
@@ -44,7 +51,7 @@ print(f"{len(items)} items downloaded for {TARGET_USER_ID}")
 blob_service = BlobServiceClient.from_connection_string(storage_cs)
 DOWNLOAD_DIR.mkdir(exist_ok=True) # ensure directory exists
 
-def download_blob(blob_url):
+def download_blob(blob_url, to_wav=False, prefix=""):
     parsed = urllib.parse.urlparse(blob_url)
     if not parsed.scheme.startswith("http"):
         raise ValueError(f"Expected full https://... blob URL, got: {blob_url}")
@@ -75,12 +82,20 @@ def download_blob(blob_url):
             return None
         
         # extract audio
-        local_audio = DOWNLOAD_DIR / pathlib.Path(blob_name).with_suffix(".mp3").name
+        ext = ".wav" if to_wav else ".mp3"
+        output_name = f"{prefix}_{pathlib.Path(blob_name).stem}{ext}"
+        local_audio = DOWNLOAD_DIR / output_name
+
         print(f"extracting audio from {blob_name} to {local_audio}")
 
+        ffmpeg_cmd = [FFMPEG_PATH, "-y", "-i", temp_file.name, "-vn"]
+        if to_wav:
+            ffmpeg_cmd += ["-ac", "1", "-ar", "16000", str(local_audio)]
+        else:
+            ffmpeg_cmd += ["-acodec", "libmp3lame", str(local_audio)]
+
         subprocess.run(
-            [FFMPEG_PATH, "-y", "-i", temp_file.name, "-vn",
-                "-acodec", "libmp3lame", str(local_audio)],
+            ffmpeg_cmd,
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT
         )
 
@@ -94,9 +109,10 @@ for item in items:
         break
 
     blob_url = item.get("BlobPath")
+    assigned_name = item.get("assignedUserName", "unknownuser").replace(" ", "_")
 
     try:
-        result = download_blob(blob_url)
+        result = download_blob(blob_url, TO_WAV, assigned_name)
         if result:
             downloaded += 1
             print(f"downloaded {downloaded} of {SIZE}")
