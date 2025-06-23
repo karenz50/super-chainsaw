@@ -36,8 +36,10 @@ SELECT * FROM c
 WHERE c.userId = @userId
   AND c.generatedEmbeddings = true
   AND c.watermarkedVideo = true
+  AND c.assignedUserName = "DeMarcus"
 ORDER BY c.uploadDate DESC
 """
+# names include Anthony, Julian, DeMarcus, Casey, Chaz
 
 items = list(container.query_items(
     query=query,

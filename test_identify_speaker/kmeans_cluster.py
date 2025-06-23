@@ -8,13 +8,14 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 # config
 training_dir = Path("data/audio")
-test_audio = Path("data/audio/new.wav")
+test_audio = Path("data/new.wav")
 WIN_SEC = 1.5
 HOP_SEC = 0.75
-N_CLUSTERS = 3
+N_CLUSTERS = 3#len(list(training_dir.glob("*.wav"))) + 1
 THRESHOLD = 0.75
 
 # load model
@@ -47,25 +48,46 @@ embeddings = np.stack(embeddings)
 kmeans = KMeans(n_clusters=N_CLUSTERS, random_state=0)
 labels = kmeans.fit_predict(embeddings)
 
+cluster_map = defaultdict(set)
+
+for clip_name, label in zip(clip_ids, labels):
+    cluster_map[clip_name].add(label)
+
+# print how many unique clusters per training file
+print("\nclusters per training file:")
+for clip_name, label_set in cluster_map.items():
+    print(f"{clip_name}: {len(label_set)} unique clusters -> {sorted(label_set)}")
+
+
 # pick dominant cluster
 (unique, counts) = np.unique(labels, return_counts=True)
 dominant = unique[np.argmax(counts)]
 centroid = kmeans.cluster_centers_[dominant]
 
-# test embedding
+# test embedding using cosine similarity
 signal, sr = torchaudio.load(test_audio)
 if sr != 16000:
     signal = torchaudio.functional.resample(signal, sr, 16000)
 with torch.no_grad():
     test_emb = encoder.encode_batch(signal).squeeze().cpu().numpy()
 
-similarity = cosine_similarity([centroid], [test_emb])[0][0]
-match = similarity >= THRESHOLD
+# similarity = cosine_similarity([centroid], [test_emb])[0][0]
+# match = similarity >= THRESHOLD
+
+# test embedding using k-nearest neighbors voting
+k = 7
+sims = cosine_similarity(embeddings, test_emb.reshape(1, -1)).flatten()
+topk_indices = np.argsort(sims)[-k:]
+topk_labels = labels[topk_indices]
+votes = np.sum(topk_labels == dominant)
 
 # results
-print(f"\nCosine Similarity to dominant voice: {similarity:.4f}")
-print(f"Threshold: {THRESHOLD}")
-print(f"Same speaker? {'YES' if match else 'NO'}\n")
+# print(f"\ncosine similarity to dominant voice: {similarity:.4f}")
+# print(f"threshold: {THRESHOLD}")
+# print(f"same speaker? {'yes' if match else 'no'}\n")
+
+print(f"{votes}/{k} nearest neighbors from dominant speaker")
+print(f"same speaker? {'yes' if votes >= (k // 2 + 1) else 'no'}\n")
 
 # cluster size printout
 print("Cluster sizes:")

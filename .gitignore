@@ -16,3 +16,11 @@ env/
 
 # macOS metadata
 .DS_Store
+
+# large files
+*.mp4
+*.wav
+*.mp3
+*.zip
+*.pt
+*.pkl
