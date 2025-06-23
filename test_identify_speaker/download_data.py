@@ -38,6 +38,10 @@ def convert_mp4_to_audio(mp4_path, to_wav=True):
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
         print(f"Converted {mp4_path.name} -> {out_path.name}")
 
+        # Delete original .mp4 after conversion
+        mp4_path.unlink()
+        print(f"Deleted original file: {mp4_path.name}")
+
     except Exception as e:
         print(f"Error converting {mp4_path.name}: {e}")
 
