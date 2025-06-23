@@ -15,7 +15,7 @@ from test_accuracy import run_test
 pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1")
 
 # run on a sample .wav
-wav_file = pathlib.Path("data/Julian_plix5ba068d6-shift-20250616_085243.wav")
+wav_file = pathlib.Path("audio.wav")
 diarization = pipeline(str(wav_file))
 
 segments = []
